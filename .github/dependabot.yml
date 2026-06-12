@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # NuGet packages. The plugin project lives under src/ and any test project
+  # under tests/, so scan both (each is where a .csproj dependency manifest
+  # lives). A directory with no manifest yet is simply skipped.
+  - package-ecosystem: "nuget"
+    directories:
+      - "/src"
+      - "/tests"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    ignore:
+      # FluentAssertions 7.x is the last free-for-OSS release; 8.x switched to
+      # a paid Xceed commercial license. Any test project here must stay on the
+      # 7.x line — stop dependabot from re-proposing the 8.x major bump.
+      - dependency-name: "FluentAssertions"
+        versions: [">=8.0.0"]
+  # Pinned versions of the GitHub Actions used by the build / release workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3

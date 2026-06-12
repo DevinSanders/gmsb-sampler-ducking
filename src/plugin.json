@@ -1,0 +1,10 @@
+{
+  "publisher": "github.DevinSanders",
+  "id": "sampler.ducking",
+  "name": "Ducking",
+  "version": "1.0.0",
+  "author": "Devin Sanders",
+  "description": "Auto-attenuates audio when loud transients hit the chosen sidechain bus. Pick a trigger bus in the editor (e.g. duck Music when SFX plays) or leave as 'self' for single-bus self-ducking.",
+  "entryDll": "DuckingPlugin.dll",
+  "isTheme": false
+}

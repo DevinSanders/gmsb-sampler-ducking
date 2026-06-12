@@ -1,0 +1,144 @@
+name: Release
+
+# Publishes this PAID plugin to itch.io when a `v*` tag is pushed — there is
+# NO public GitHub Release; the pre-built binary is distributed (sold /
+# pay-what-you-want) via itch. Builds + packages the same way the build
+# workflow does, then `butler push`es the zip to the itch project named by
+# the ITCH_TARGET repo variable. Buyers drop that zip onto Game Master
+# Sound Board's Plugin Manager to install.
+#
+# Tag convention: `v<semver>` (e.g. `v1.0.0`, `v1.1.0-beta.1`). Tags
+# containing a `-` are marked as prereleases automatically. This repo's
+# tag namespace is its own — distinct from the main app's `v*` tags
+# because it lives in its own repository.
+#
+# The version baked into the artifact is derived from the tag (the
+# leading `v` is stripped) and passed to package.ps1 via -Version,
+# which then:
+#   • Stamps it into plugin.json (the manifest the host reads).
+#   • Forwards it to `dotnet publish -p:Version=` so the assembly's
+#     AssemblyInformationalVersion matches (PluginVersion.OfAssembly
+#     reads that at runtime).
+#   • Uses it in the zip filename: <publisher>-<id>-<version>.zip.
+# So the tag is the single source of truth for the released version
+# regardless of what plugin.json or the csproj say in source.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release as (e.g. v1.0.0). Will be created if it does not exist.'
+        required: true
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read   # publishing to itch.io needs no write access to the repo
+
+jobs:
+  release:
+    name: Build + package + publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Derive version from tag
+        id: ver
+        shell: bash
+        # On `push` events, github.ref_name is the tag (e.g. "v1.2.3").
+        # On `workflow_dispatch`, github.ref_name is the branch — read
+        # the manual `tag` input instead and use it both for the release
+        # name AND the version stamp. Either way: strip the leading `v`.
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tag:     $TAG"
+          echo "Version: $VERSION"
+
+      - name: Restore
+        run: dotnet restore src/*.csproj
+
+      - name: Test
+        # Tests gate the release: a red test skips the itch.io push.
+        run: dotnet test tests/DuckingPlugin.Tests.csproj -c Release --nologo
+
+      - name: Package
+        shell: pwsh
+        # -Version makes the script stamp plugin.json + pass
+        # -p:Version= through to dotnet publish so the manifest and the
+        # assembly metadata both reflect the release tag.
+        run: ./scripts/package.ps1 -Version '${{ steps.ver.outputs.version }}'
+
+      - name: Smoke-test the zip's manifest
+        # Mirror what Game Master Sound Board's installer does on
+        # ingestion — open the zip, find plugin.json, parse it,
+        # confirm the declared entryDll exists alongside, AND confirm
+        # the manifest's version matches the tag-derived version.
+        # Catches packaging regressions before they reach end users.
+        shell: pwsh
+        env:
+          EXPECTED_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = Get-ChildItem dist -Filter *.zip | Select-Object -First 1
+          if (-not $zip) { throw "No zip produced." }
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+          try {
+            $manifestEntry = $archive.Entries | Where-Object { $_.Name -eq 'plugin.json' } | Select-Object -First 1
+            if (-not $manifestEntry) { throw "$($zip.Name): no plugin.json inside." }
+            $reader = New-Object System.IO.StreamReader($manifestEntry.Open())
+            $json = $reader.ReadToEnd() | ConvertFrom-Json
+            $reader.Close()
+            foreach ($field in 'publisher','id','entryDll') {
+              if (-not $json.$field) { throw "$($zip.Name): plugin.json missing '$field'." }
+            }
+            $manifestFolder = Split-Path $manifestEntry.FullName -Parent
+            $entryPath = "$manifestFolder/$($json.entryDll)"
+            if (-not ($archive.Entries | Where-Object { $_.FullName -eq $entryPath })) {
+              throw "$($zip.Name): manifest declares entryDll '$($json.entryDll)' but $entryPath is not in the zip."
+            }
+            if ($json.version -ne $env:EXPECTED_VERSION) {
+              throw "$($zip.Name): manifest version '$($json.version)' does not match tag-derived version '$env:EXPECTED_VERSION'."
+            }
+            Write-Host "OK $($zip.Name) — $($json.publisher)/$($json.id) v$($json.version)"
+          } finally {
+            $archive.Dispose()
+          }
+
+      - name: Publish to itch.io (butler)
+        # Paid plugin — published to itch.io, NOT as a public GitHub Release.
+        # Requires:
+        #   - secret   BUTLER_API_KEY  : an itch.io API key (repo or org secret)
+        #   - variable ITCH_TARGET     : butler target "user/project:channel",
+        #                                e.g. "dsand64/gmsb-sampler-ducking:cross-platform"
+        # The zip from package.ps1 is exactly what the host's Plugin Manager
+        # ingests; butler versions it per channel via --userversion.
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          if [ -z "${{ vars.ITCH_TARGET }}" ]; then
+            echo "::error::Repo variable ITCH_TARGET is not set (expected user/project:channel)."
+            exit 1
+          fi
+          curl -sL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler-bin
+          chmod +x butler-bin/butler
+          ZIP="$(ls dist/*.zip | head -n1)"
+          echo "Pushing $ZIP -> ${{ vars.ITCH_TARGET }} (version ${{ steps.ver.outputs.version }})"
+          butler-bin/butler push "$ZIP" "${{ vars.ITCH_TARGET }}"             --userversion "${{ steps.ver.outputs.version }}"

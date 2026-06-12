@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- xunit.v3 ships its own test host; the project runs as an exe. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\DuckingPlugin.csproj" />
+
+    <!-- The plugin marks NAudio.Core and SoundBoard.PluginApi
+         ExcludeAssets="runtime" (the host owns those at runtime). The test
+         host has no host, so pull both in directly so the DSP and the
+         sidechain-registry fakes actually have their assemblies at run
+         time. -->
+    <PackageReference Include="NAudio.Core" Version="2.3.0" />
+    <PackageReference Include="SoundBoard.PluginApi" Version="1.0.0-beta.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- FluentAssertions pinned to 7.x — 8.x changed its license to a paid
+         model for commercial use. -->
+    <PackageReference Include="FluentAssertions" Version="7.2.2" />
+  </ItemGroup>
+
+</Project>

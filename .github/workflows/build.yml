@@ -1,0 +1,39 @@
+name: Build
+
+# Validates the plugin builds + packages on every push and PR. The
+# produced zip is uploaded as a workflow artifact so reviewers can
+# install it on a local copy of Game Master Sound Board to smoke-test
+# without having to build the plugin themselves.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build + package
+    # Plugins target net10.0 and use only managed dependencies (no
+    # native bins). One run on ubuntu produces a zip that installs on
+    # Windows / macOS / Linux. No matrix needed.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore src/*.csproj
+
+      - name: Test
+        run: dotnet test tests/DuckingPlugin.Tests.csproj -c Release --nologo
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1

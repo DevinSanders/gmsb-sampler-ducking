@@ -1,0 +1,20 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+publish/
+
+# Packaging script output
+dist/
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local AI-assistant guidance (not published)
+CLAUDE.md

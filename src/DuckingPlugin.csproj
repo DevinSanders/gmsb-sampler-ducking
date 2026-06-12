@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DuckingPlugin</AssemblyName>
+    <RootNamespace>DuckingPlugin</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Default for local dev builds. CI release.yml overrides via
+         `-p:Version=<tag-derived>`; PluginVersion.OfAssembly reads it
+         at runtime. Keep in sync with plugin.json for local builds. -->
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SoundBoard.PluginApi" Version="1.0.0-beta.1" ExcludeAssets="runtime" />
+
+    <!-- Avalonia is required at compile time for CreateControl() (which hands
+         the host an Avalonia Control). The host's PluginLoadContext defers
+         Avalonia to the default ALC at runtime, so we MUST NOT ship our own
+         copy — two Avalonia.*.dlls in two different ALCs would produce two
+         distinct CLR types named "Control", and the cast on the host side
+         would fail. ExcludeAssets="runtime" keeps the reference for the
+         compiler but strips every Avalonia.*.dll from the publish output. -->
+    <PackageReference Include="Avalonia" Version="12.0.4" ExcludeAssets="runtime" />
+
+    <!-- Same reasoning as Avalonia: NAudio.Core types (ISampleProvider) live
+         in the contract, the host owns the live instance, the plugin must
+         compile against it but not ship it. Overrides the transitive
+         reference that would otherwise come in through SoundBoard.PluginApi. -->
+    <PackageReference Include="NAudio.Core" Version="2.3.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="plugin.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
