@@ -23,7 +23,7 @@
          distinct CLR types named "Control", and the cast on the host side
          would fail. ExcludeAssets="runtime" keeps the reference for the
          compiler but strips every Avalonia.*.dll from the publish output. -->
-    <PackageReference Include="Avalonia" Version="12.0.5" ExcludeAssets="runtime" />
+    <PackageReference Include="Avalonia" Version="12.1.0" ExcludeAssets="runtime" />
 
     <!-- Same reasoning as Avalonia: NAudio.Core types (ISampleProvider) live
          in the contract, the host owns the live instance, the plugin must
